@@ -7,7 +7,7 @@
 <style>
   html,body{height:100%;margin:0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;transition:background .1s}
   body{background:#222;color:#fff;flex-direction:column;gap:1rem;cursor:pointer;user-select:none}
-  h1{font-size:2rem;margin:0}
+  h1{font-size:2rem;margin:0;transition:transform .1s}
   p{font-size:1.2rem;opacity:.8}
 </style>
 </head>
@@ -21,17 +21,18 @@
   if (bestMs) best.textContent = 'Best: ' + bestMs + ' ms';
 
   function handleAction(e) {
-    // If it's a keyboard event, only react to the Spacebar
     if (e.type === 'keydown' && e.code !== 'Space') return;
 
     if (state === 'idle') {
       state = 'waiting';
       body.style.background = '#a33';
+      msg.style.transform = 'scale(1)';
       msg.textContent = 'Wait for green...';
       const delay = 1000 + Math.random() * 3000;
       timer = setTimeout(() => {
         state = 'go';
         body.style.background = '#2a2';
+        msg.style.transform = 'scale(1.5)';
         msg.textContent = 'CLICK!';
         start = performance.now();
       }, delay);
@@ -39,11 +40,13 @@
       clearTimeout(timer);
       state = 'idle';
       body.style.background = '#222';
+      msg.style.transform = 'scale(1)';
       msg.textContent = 'Too soon! Click/Space to retry';
     } else if (state === 'go') {
       const ms = Math.round(performance.now() - start);
       state = 'idle';
       body.style.background = '#222';
+      msg.style.transform = 'scale(1)';
       msg.textContent = ms + ' ms — click/Space to try again';
       if (!bestMs || ms < bestMs) {
         bestMs = ms;
@@ -53,7 +56,6 @@
     }
   }
 
-  // Use pointerdown for instant mouse/touch, and keydown for keyboard
   body.addEventListener('pointerdown', handleAction);
   document.addEventListener('keydown', handleAction);
 </script>

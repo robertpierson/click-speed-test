@@ -2,63 +2,245 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Reflex Test</title>
+<title>Reflex Test — Ultimate Edition</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  html,body{height:100%;margin:0;font-family:sans-serif;display:flex;align-items:center;justify-content:center;transition:background .1s}
-  body{background:#222;color:#fff;flex-direction:column;gap:1rem;cursor:pointer;user-select:none}
-  h1{font-size:2rem;margin:0;transition:transform .1s}
-  p{font-size:1.2rem;opacity:.8}
+  :root {
+    --bg-idle: #0f172a;
+    --bg-waiting: #991b1b;
+    --bg-go: #15803d;
+    --bg-early: #c2410c;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+  }
+
+  body {
+    background-color: var(--bg-idle);
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+  }
+
+  .container {
+    text-align: center;
+    padding: 2.5rem 2rem;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+    max-width: 90%;
+    width: 480px;
+    pointer-events: none;
+    transition: transform 0.15s ease, background 0.2s ease;
+  }
+
+  .icon {
+    font-size: 3.5rem;
+    margin-bottom: 0.5rem;
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+  }
+
+  h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    margin: 0 0 0.5rem 0;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  p.subtitle {
+    font-size: 1.1rem;
+    margin: 0;
+    opacity: 0.8;
+  }
+
+  .rank-badge {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.4rem 1rem;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    display: none;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .stat-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.6;
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
 </style>
 </head>
 <body>
-<h1 id="msg">Click or press Space to start</h1>
-<p id="best"></p>
+
+<div class="container" id="card">
+  <div class="icon" id="icon">⚡</div>
+  <h1 id="msg">Click or Press Space</h1>
+  <p class="subtitle" id="sub">Test your speed & reaction time</p>
+  <div class="rank-badge" id="rank"></div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <span class="stat-label">Best</span>
+      <span class="stat-value" id="best-val">--</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Last</span>
+      <span class="stat-value" id="last-val">--</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Average</span>
+      <span class="stat-value" id="avg-val">--</span>
+    </div>
+  </div>
+</div>
+
 <script>
-  const body = document.body, msg = document.getElementById('msg'), best = document.getElementById('best');
-  let state = 'idle', start = 0, timer = null;
-  
-  // Safely parse the stored string into a rigid base-10 integer
+  const body = document.body;
+  const msg = document.getElementById('msg');
+  const sub = document.getElementById('sub');
+  const icon = document.getElementById('icon');
+  const rank = document.getElementById('rank');
+  const bestVal = document.getElementById('best-val');
+  const lastVal = document.getElementById('last-val');
+  const avgVal = document.getElementById('avg-val');
+
+  let state = 'idle';
+  let start = 0;
+  let timer = null;
+  let scores = [];
+
+  // Web Audio API for sound effects
+  let audioCtx = null;
+  function playSound(freq, type, duration) {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    } catch (e) {}
+  }
+
+  // Load stored best
   const storedBest = localStorage.getItem('bestMs');
   let bestMs = storedBest ? parseInt(storedBest, 10) : null;
-  
-  if (bestMs) best.textContent = 'Best: ' + bestMs + ' ms';
+  if (bestMs) bestVal.textContent = bestMs + ' ms';
+
+  function getRank(ms) {
+    if (ms < 170) return '⚡ Esports God';
+    if (ms < 210) return '🎮 Pro Gamer';
+    if (ms < 260) return '🔥 Fast Reflexes';
+    if (ms < 320) return '🐢 Human Average';
+    return '💤 Sloth Speed';
+  }
 
   function handleAction(e) {
-    if (e.type === 'keydown' && e.code !== 'Space') return;
+    if (e.type === 'keydown') {
+      if (e.code !== 'Space') return;
+      e.preventDefault();
+    }
 
     if (state === 'idle') {
       state = 'waiting';
-      body.style.background = '#a33';
-      msg.style.transform = 'scale(1)';
+      body.style.backgroundColor = 'var(--bg-waiting)';
+      icon.textContent = '✋';
       msg.textContent = 'Wait for green...';
-      const delay = 1000 + Math.random() * 3000;
+      sub.textContent = 'Keep your finger ready';
+      rank.style.display = 'none';
+
+      const delay = 1500 + Math.random() * 3000;
       timer = setTimeout(() => {
         state = 'go';
-        body.style.background = '#2a2';
-        msg.style.transform = 'scale(1.5)';
-        msg.textContent = 'CLICK!';
+        body.style.backgroundColor = 'var(--bg-go)';
+        icon.textContent = '⚡';
+        msg.textContent = 'CLICK NOW!';
+        sub.textContent = 'Fast!';
         start = performance.now();
+        playSound(880, 'sine', 0.15); // High beep
       }, delay);
+
     } else if (state === 'waiting') {
       clearTimeout(timer);
       state = 'idle';
-      body.style.background = '#222';
-      msg.style.transform = 'scale(1)';
-      msg.textContent = 'Too soon! Click/Space to retry';
+      body.style.backgroundColor = 'var(--bg-early)';
+      icon.textContent = '⚠️';
+      msg.textContent = 'Too soon!';
+      sub.textContent = 'Click or press Space to try again';
+      playSound(150, 'sawtooth', 0.2); // Error sound
+
     } else if (state === 'go') {
       const ms = Math.round(performance.now() - start);
       state = 'idle';
-      body.style.background = '#222';
-      msg.style.transform = 'scale(1)';
-      msg.textContent = ms + ' ms — click/Space to try again';
-      
-      // Since bestMs is now strictly an integer (or null), this comparison is rock solid
+      body.style.backgroundColor = 'var(--bg-idle)';
+      playSound(587.33, 'triangle', 0.25); // Win sound
+
+      msg.textContent = ms + ' ms';
+      sub.textContent = 'Click or press Space to retry';
+      lastVal.textContent = ms + ' ms';
+
+      // Update averages
+      scores.push(ms);
+      const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+      avgVal.textContent = avg + ' ms';
+
+      // Update Best
       if (bestMs === null || ms < bestMs) {
         bestMs = ms;
-        localStorage.setItem('bestMs', ms.toString()); // Explicitly store as a string
-        best.textContent = 'Best: ' + ms + ' ms';
+        localStorage.setItem('bestMs', ms.toString());
+        bestVal.textContent = ms + ' ms';
       }
+
+      // Show Rank
+      rank.textContent = getRank(ms);
+      rank.style.display = 'inline-block';
     }
   }
 

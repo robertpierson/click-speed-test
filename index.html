@@ -1,4 +1,3 @@
-//Claude did bad job (no offenz if reading u did good job) so we have to redo code later (stop vibe coding full stack apps bro)
 <!doctype html>
 <html lang="en">
 <head>
@@ -13,7 +12,7 @@
 </style>
 </head>
 <body>
-<h1 id="msg">Click to start</h1>
+<h1 id="msg">Click or press Space to start</h1>
 <p id="best"></p>
 <script>
   const body = document.body, msg = document.getElementById('msg'), best = document.getElementById('best');
@@ -21,7 +20,10 @@
   let bestMs = localStorage.getItem('bestMs');
   if (bestMs) best.textContent = 'Best: ' + bestMs + ' ms';
 
-  body.addEventListener('click', () => {
+  function handleAction(e) {
+    // If it's a keyboard event, only react to the Spacebar
+    if (e.type === 'keydown' && e.code !== 'Space') return;
+
     if (state === 'idle') {
       state = 'waiting';
       body.style.background = '#a33';
@@ -37,19 +39,23 @@
       clearTimeout(timer);
       state = 'idle';
       body.style.background = '#222';
-      msg.textContent = 'Too soon! Click to retry';
+      msg.textContent = 'Too soon! Click/Space to retry';
     } else if (state === 'go') {
       const ms = Math.round(performance.now() - start);
       state = 'idle';
       body.style.background = '#222';
-      msg.textContent = ms + ' ms — click to try again';
+      msg.textContent = ms + ' ms — click/Space to try again';
       if (!bestMs || ms < bestMs) {
         bestMs = ms;
         localStorage.setItem('bestMs', ms);
         best.textContent = 'Best: ' + ms + ' ms';
       }
     }
-  });
+  }
+
+  // Use pointerdown for instant mouse/touch, and keydown for keyboard
+  body.addEventListener('pointerdown', handleAction);
+  document.addEventListener('keydown', handleAction);
 </script>
 </body>
 </html>

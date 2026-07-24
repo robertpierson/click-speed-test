@@ -17,7 +17,11 @@
 <script>
   const body = document.body, msg = document.getElementById('msg'), best = document.getElementById('best');
   let state = 'idle', start = 0, timer = null;
-  let bestMs = localStorage.getItem('bestMs');
+  
+  // Safely parse the stored string into a rigid base-10 integer
+  const storedBest = localStorage.getItem('bestMs');
+  let bestMs = storedBest ? parseInt(storedBest, 10) : null;
+  
   if (bestMs) best.textContent = 'Best: ' + bestMs + ' ms';
 
   function handleAction(e) {
@@ -48,9 +52,11 @@
       body.style.background = '#222';
       msg.style.transform = 'scale(1)';
       msg.textContent = ms + ' ms — click/Space to try again';
-      if (!bestMs || ms < bestMs) {
+      
+      // Since bestMs is now strictly an integer (or null), this comparison is rock solid
+      if (bestMs === null || ms < bestMs) {
         bestMs = ms;
-        localStorage.setItem('bestMs', ms);
+        localStorage.setItem('bestMs', ms.toString()); // Explicitly store as a string
         best.textContent = 'Best: ' + ms + ' ms';
       }
     }

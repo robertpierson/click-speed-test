@@ -7,7 +7,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    /* Rich gradients instead of flat colors */
     --bg-idle: radial-gradient(circle at 50% 0%, #1e293b 0%, #0f172a 100%);
     --bg-waiting: radial-gradient(circle at 50% 0%, #b91c1c 0%, #7f1d1d 100%);
     --bg-go: radial-gradient(circle at 50% 0%, #16a34a 0%, #14532d 100%);
@@ -25,8 +24,14 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     user-select: none;
     -webkit-user-select: none;
-    touch-action: none; /* Prevents mobile zoom/scroll issues */
+    touch-action: none; 
     overflow: hidden;
+  }
+
+  /* Accessibility: Outline for keyboard focus */
+  body:focus-visible {
+    outline: 4px solid rgba(255, 255, 255, 0.5);
+    outline-offset: -4px;
   }
 
   body {
@@ -52,7 +57,7 @@
                 inset 0 1px 0 rgba(255, 255, 255, 0.1);
     max-width: 90%;
     width: 480px;
-    pointer-events: none; /* Lets clicks pass through to body */
+    pointer-events: none; 
     transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
@@ -150,7 +155,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Reset Button */
   .reset-btn {
     margin-top: 2rem;
     background: transparent;
@@ -160,22 +164,24 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     cursor: pointer;
-    pointer-events: auto; /* Re-enable clicks specifically for this */
+    pointer-events: auto; 
     transition: color 0.2s ease;
     font-family: inherit;
     padding: 0.5rem;
+    border-radius: 4px;
   }
 
-  .reset-btn:hover {
+  .reset-btn:hover, .reset-btn:focus-visible {
     color: rgba(255, 255, 255, 0.8);
+    outline: 2px solid rgba(255, 255, 255, 0.5);
   }
 </style>
 </head>
-<body>
+<body role="button" tabindex="0" aria-label="Interactive Reflex Test">
 
 <div class="container" id="card">
   <div class="icon" id="icon">⚡</div>
-  <h1 id="msg">Click or Press Space</h1>
+  <h1 id="msg" aria-live="polite">Click or Press Space</h1>
   <p class="subtitle" id="sub">Test your speed & reaction time</p>
   <div class="rank-badge" id="rank"></div>
 
@@ -194,202 +200,254 @@
     </div>
   </div>
   
-  <button class="reset-btn" id="reset-btn">Reset Stats</button>
+  <button class="reset-btn" id="reset-btn" aria-label="Reset Statistics">Reset Stats</button>
 </div>
 
 <script>
-  const body = document.body;
-  const card = document.getElementById('card');
-  const msg = document.getElementById('msg');
-  const sub = document.getElementById('sub');
-  const icon = document.getElementById('icon');
-  const rank = document.getElementById('rank');
-  const bestVal = document.getElementById('best-val');
-  const lastVal = document.getElementById('last-val');
-  const avgVal = document.getElementById('avg-val');
-  const resetBtn = document.getElementById('reset-btn');
+class ReflexGame {
+  constructor() {
+    // Centralized configuration
+    this.CONFIG = {
+      delays: { min: 1500, max: 3000 },
+      ranks: [
+        { limit: 170, title: '⚡ Esports God' },
+        { limit: 210, title: '🎮 Pro Gamer' },
+        { limit: 260, title: '🔥 Fast Reflexes' },
+        { limit: 320, title: '🐢 Human Average' },
+        { limit: Infinity, title: '💤 Sloth Speed' }
+      ],
+      sounds: {
+        go: { freq: 880, type: 'sine', duration: 0.15, vol: 0.2 },
+        early: { freq: 150, type: 'sawtooth', duration: 0.3, vol: 0.1 },
+        success: { freq: 587.33, type: 'triangle', duration: 0.4, vol: 0.15 }
+      }
+    };
 
-  let state = 'idle';
-  let start = 0;
-  let timer = null;
-  let scores = [];
-  let bestMs = null;
+    // State Variables
+    this.state = 'idle'; // 'idle', 'waiting', 'go'
+    this.timer = null;
+    this.startMs = 0;
+    this.scores = [];
+    this.bestMs = null;
+    this.audioCtx = null;
 
-  // Web Audio API - Pre-warmed for zero latency
-  let audioCtx = null;
-  
-  function initAudio() {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // DOM Elements
+    this.ui = {
+      body: document.body,
+      card: document.getElementById('card'),
+      msg: document.getElementById('msg'),
+      sub: document.getElementById('sub'),
+      icon: document.getElementById('icon'),
+      rank: document.getElementById('rank'),
+      bestVal: document.getElementById('best-val'),
+      lastVal: document.getElementById('last-val'),
+      avgVal: document.getElementById('avg-val'),
+      resetBtn: document.getElementById('reset-btn')
+    };
+
+    this.init();
+  }
+
+  init() {
+    this.loadStats();
+    this.bindEvents();
+  }
+
+  bindEvents() {
+    // Use an arrow function to preserve 'this' context
+    const actionHandler = (e) => this.handleAction(e);
+    
+    this.ui.body.addEventListener('pointerdown', actionHandler);
+    document.addEventListener('keydown', actionHandler);
+    
+    this.ui.resetBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.resetStats();
+    });
+  }
+
+  initAudio() {
+    if (!this.audioCtx) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) this.audioCtx = new AudioContext();
     }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
     }
   }
 
-  function playSound(freq, type, duration, vol = 0.15) {
-    if (!audioCtx) return;
+  playSound(config) {
+    if (!this.audioCtx) return;
     try {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      const { freq, type, duration, vol } = config;
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
       
-      // Smooth envelope to prevent audio clicking/popping
-      gain.gain.setValueAtTime(0, audioCtx.currentTime);
-      gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
+      
+      // Smooth envelope for clean audio
+      gain.gain.setValueAtTime(0, this.audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(vol, this.audioCtx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + duration);
       
       osc.connect(gain);
-      gain.connect(audioCtx.destination);
+      gain.connect(this.audioCtx.destination);
       osc.start();
-      osc.stop(audioCtx.currentTime + duration);
+      osc.stop(this.audioCtx.currentTime + duration);
     } catch (e) {
       console.warn("Audio playback failed", e);
     }
   }
 
-  // Load Stats
-  function loadStats() {
-    const storedBest = localStorage.getItem('reflexBest');
-    const storedScores = localStorage.getItem('reflexScores');
-    
-    if (storedBest) {
-      bestMs = parseInt(storedBest, 10);
-      bestVal.textContent = bestMs + ' ms';
-    } else {
-      bestMs = null;
-      bestVal.textContent = '--';
-    }
-
-    if (storedScores) {
-      scores = JSON.parse(storedScores);
-      updateAverage();
-    } else {
-      scores = [];
-      avgVal.textContent = '--';
+  // Local Storage with Error Handling (Failsafe for Incognito/Restricted modes)
+  loadStats() {
+    try {
+      const storedBest = localStorage.getItem('reflexBest');
+      const storedScores = localStorage.getItem('reflexScores');
+      
+      this.bestMs = storedBest ? parseInt(storedBest, 10) : null;
+      this.scores = storedScores ? JSON.parse(storedScores) : [];
+      
+      this.ui.bestVal.textContent = this.bestMs ? `${this.bestMs} ms` : '--';
+      this.updateAverage();
+    } catch (e) {
+      console.warn('LocalStorage is not available.');
     }
   }
 
-  function saveStats() {
-    localStorage.setItem('reflexBest', bestMs.toString());
-    localStorage.setItem('reflexScores', JSON.stringify(scores));
+  saveStats() {
+    try {
+      localStorage.setItem('reflexBest', this.bestMs.toString());
+      localStorage.setItem('reflexScores', JSON.stringify(this.scores));
+    } catch (e) {
+      // Fail silently if storage is restricted
+    }
   }
 
-  function updateAverage() {
-    if (scores.length === 0) return;
-    const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-    avgVal.textContent = avg + ' ms';
-  }
-
-  function getRank(ms) {
-    if (ms < 170) return '⚡ Esports God';
-    if (ms < 210) return '🎮 Pro Gamer';
-    if (ms < 260) return '🔥 Fast Reflexes';
-    if (ms < 320) return '🐢 Human Average';
-    return '💤 Sloth Speed';
-  }
-
-  function resetState() {
-    card.className = 'container'; // clear animations
-    rank.classList.remove('show');
-  }
-
-  function handleAction(e) {
-    // Ignore clicks on the reset button
-    if (e.target === resetBtn) return;
+  resetStats() {
+    try {
+      localStorage.removeItem('reflexBest');
+      localStorage.removeItem('reflexScores');
+    } catch (e) {}
     
-    // Normalize input
+    this.scores = [];
+    this.bestMs = null;
+    this.ui.lastVal.textContent = '--';
+    this.ui.bestVal.textContent = '--';
+    this.ui.avgVal.textContent = '--';
+    
+    this.ui.resetBtn.textContent = 'Cleared!';
+    setTimeout(() => this.ui.resetBtn.textContent = 'Reset Stats', 1000);
+  }
+
+  updateAverage() {
+    if (this.scores.length === 0) {
+      this.ui.avgVal.textContent = '--';
+      return;
+    }
+    const sum = this.scores.reduce((a, b) => a + b, 0);
+    const avg = Math.round(sum / this.scores.length);
+    this.ui.avgVal.textContent = `${avg} ms`;
+  }
+
+  getRank(ms) {
+    return this.CONFIG.ranks.find(r => ms < r.limit).title;
+  }
+
+  resetUIState() {
+    this.ui.card.className = 'container';
+    this.ui.rank.classList.remove('show');
+  }
+
+  updateUI(bgVar, iconText, msgText, subText, animationClass = null) {
+    this.resetUIState();
+    if (animationClass) this.ui.card.classList.add(animationClass);
+    
+    this.ui.body.style.background = `var(${bgVar})`;
+    this.ui.icon.textContent = iconText;
+    this.ui.msg.textContent = msgText;
+    this.ui.sub.textContent = subText;
+  }
+
+  handleAction(e) {
+    if (e.target === this.ui.resetBtn) return;
+    
     if (e.type === 'keydown') {
       if (e.code !== 'Space') return;
       e.preventDefault();
-      // Prevent key repeat triggering multiple times
-      if (e.repeat) return; 
+      if (e.repeat) return; // Prevent holding down spacebar
     }
 
-    initAudio();
+    this.initAudio();
 
-    if (state === 'idle') {
-      state = 'waiting';
-      resetState();
-      card.classList.add('state-waiting');
-      body.style.background = 'var(--bg-waiting)';
-      icon.textContent = '✋';
-      msg.textContent = 'Wait for green...';
-      sub.textContent = 'Keep your finger ready';
-
-      const delay = 1500 + Math.random() * 3000;
-      timer = setTimeout(() => {
-        state = 'go';
-        card.classList.remove('state-waiting');
-        body.style.background = 'var(--bg-go)';
-        icon.textContent = '⚡';
-        msg.textContent = 'CLICK NOW!';
-        sub.textContent = 'Fast!';
-        start = performance.now();
-        playSound(880, 'sine', 0.15, 0.2); 
-      }, delay);
-
-    } else if (state === 'waiting') {
-      clearTimeout(timer);
-      state = 'idle';
-      resetState();
-      card.classList.add('state-early');
-      body.style.background = 'var(--bg-early)';
-      icon.textContent = '⚠️';
-      msg.textContent = 'Too soon!';
-      sub.textContent = 'Click or press Space to try again';
-      playSound(150, 'sawtooth', 0.3, 0.1); 
-
-    } else if (state === 'go') {
-      const end = performance.now();
-      const ms = Math.round(end - start);
-      
-      state = 'idle';
-      resetState();
-      card.classList.add('state-pop');
-      setTimeout(() => card.classList.remove('state-pop'), 200);
-      
-      body.style.background = 'var(--bg-idle)';
-      playSound(587.33, 'triangle', 0.4, 0.15); 
-
-      msg.textContent = ms + ' ms';
-      sub.textContent = 'Click or press Space to retry';
-      lastVal.textContent = ms + ' ms';
-
-      scores.push(ms);
-      
-      if (bestMs === null || ms < bestMs) {
-        bestMs = ms;
-        bestVal.textContent = ms + ' ms';
-      }
-
-      updateAverage();
-      saveStats();
-
-      rank.textContent = getRank(ms);
-      rank.classList.add('show');
+    switch (this.state) {
+      case 'idle':
+        this.startWaiting();
+        break;
+      case 'waiting':
+        this.triggerEarly();
+        break;
+      case 'go':
+        this.registerClick();
+        break;
     }
   }
 
-  // Event Listeners
-  body.addEventListener('pointerdown', handleAction);
-  document.addEventListener('keydown', handleAction);
-  
-  resetBtn.addEventListener('click', (e) => {
-    e.stopPropagation(); // Stop it from triggering the main game
-    localStorage.removeItem('reflexBest');
-    localStorage.removeItem('reflexScores');
-    lastVal.textContent = '--';
-    loadStats();
-    
-    // Brief visual feedback on button
-    resetBtn.textContent = 'Cleared!';
-    setTimeout(() => resetBtn.textContent = 'Reset Stats', 1000);
-  });
+  startWaiting() {
+    this.state = 'waiting';
+    this.updateUI('--bg-waiting', '✋', 'Wait for green...', 'Keep your finger ready', 'state-waiting');
 
-  // Initialize
-  loadStats();
+    const delay = this.CONFIG.delays.min + Math.random() * (this.CONFIG.delays.max - this.CONFIG.delays.min);
+    
+    this.timer = setTimeout(() => {
+      this.state = 'go';
+      this.updateUI('--bg-go', '⚡', 'CLICK NOW!', 'Fast!');
+      this.ui.card.classList.remove('state-waiting');
+      this.startMs = performance.now();
+      this.playSound(this.CONFIG.sounds.go);
+    }, delay);
+  }
+
+  triggerEarly() {
+    clearTimeout(this.timer);
+    this.state = 'idle';
+    this.updateUI('--bg-early', '⚠️', 'Too soon!', 'Click or press Space to try again', 'state-early');
+    this.playSound(this.CONFIG.sounds.early);
+  }
+
+  registerClick() {
+    const endMs = performance.now();
+    const reactionTime = Math.round(endMs - this.startMs);
+    
+    this.state = 'idle';
+    this.updateUI('--bg-idle', '⚡', `${reactionTime} ms`, 'Click or press Space to retry', 'state-pop');
+    setTimeout(() => this.ui.card.classList.remove('state-pop'), 200);
+    
+    this.playSound(this.CONFIG.sounds.success);
+
+    // Update Stats
+    this.ui.lastVal.textContent = `${reactionTime} ms`;
+    this.scores.push(reactionTime);
+    
+    if (this.bestMs === null || reactionTime < this.bestMs) {
+      this.bestMs = reactionTime;
+      this.ui.bestVal.textContent = `${reactionTime} ms`;
+    }
+
+    this.updateAverage();
+    this.saveStats();
+
+    // Show Rank
+    this.ui.rank.textContent = this.getRank(reactionTime);
+    this.ui.rank.classList.add('show');
+  }
+}
+
+// Boot the game when the DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  new ReflexGame();
+});
 </script>
 </body>
 </html>

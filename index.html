@@ -14,9 +14,13 @@
     
     --card-bg: rgba(255, 255, 255, 0.08);
     --card-border: rgba(255, 255, 255, 0.15);
+    --gold: #fbbf24;
   }
 
-  * { box-sizing: border-box; }
+  * { 
+    box-sizing: border-box; 
+    -webkit-tap-highlight-color: transparent; /* Removes mobile tap flash */
+  }
 
   html, body {
     height: 100%;
@@ -28,7 +32,6 @@
     overflow: hidden;
   }
 
-  /* Accessibility: Outline for keyboard focus */
   body:focus-visible {
     outline: 4px solid rgba(255, 255, 255, 0.5);
     outline-offset: -4px;
@@ -63,15 +66,20 @@
 
   /* Animations */
   @keyframes pulse {
-    0% { transform: scale(1); }
+    0%, 100% { transform: scale(1); }
     50% { transform: scale(1.02); }
-    100% { transform: scale(1); }
   }
 
   @keyframes shake {
     0%, 100% { transform: translateX(0); }
     20%, 60% { transform: translateX(-10px); }
     40%, 80% { transform: translateX(10px); }
+  }
+  
+  @keyframes popNewBest {
+    0% { transform: scale(1); color: #fff; text-shadow: none; }
+    50% { transform: scale(1.2); color: var(--gold); text-shadow: 0 0 15px var(--gold); }
+    100% { transform: scale(1); color: var(--gold); text-shadow: 0 0 8px rgba(251, 191, 36, 0.5); }
   }
 
   .state-waiting { animation: pulse 1.5s infinite ease-in-out; }
@@ -104,17 +112,17 @@
     display: inline-block;
     margin-top: 1.2rem;
     padding: 0.5rem 1.2rem;
-    background: linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05));
+    background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.02));
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 999px;
     font-size: 0.95rem;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: 0.05em;
     text-transform: uppercase;
     box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     opacity: 0;
     transform: translateY(10px);
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transition: opacity 0.3s ease, transform 0.3s ease, border-color 0.3s ease, color 0.3s ease;
   }
   
   .rank-badge.show {
@@ -138,6 +146,7 @@
     background: rgba(0, 0, 0, 0.2);
     padding: 1rem 0.5rem;
     border-radius: 16px;
+    transition: all 0.3s ease;
   }
 
   .stat-label {
@@ -154,6 +163,10 @@
     font-weight: 800;
     font-variant-numeric: tabular-nums;
   }
+  
+  .new-best {
+    animation: popNewBest 0.5s forwards ease-out;
+  }
 
   .reset-btn {
     margin-top: 2rem;
@@ -167,13 +180,14 @@
     pointer-events: auto; 
     transition: color 0.2s ease;
     font-family: inherit;
-    padding: 0.5rem;
-    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
   }
 
   .reset-btn:hover, .reset-btn:focus-visible {
     color: rgba(255, 255, 255, 0.8);
-    outline: 2px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.05);
+    outline: none;
   }
 </style>
 </head>
@@ -206,32 +220,30 @@
 <script>
 class ReflexGame {
   constructor() {
-    // Centralized configuration
     this.CONFIG = {
-      delays: { min: 1500, max: 3000 },
+      delays: { min: 1500, max: 3500 },
       ranks: [
-        { limit: 170, title: '⚡ Esports God' },
-        { limit: 210, title: '🎮 Pro Gamer' },
-        { limit: 260, title: '🔥 Fast Reflexes' },
-        { limit: 320, title: '🐢 Human Average' },
-        { limit: Infinity, title: '💤 Sloth Speed' }
+        { limit: 180, title: '⚡ Esports God', color: '#fbbf24' },  // Gold
+        { limit: 220, title: '🎮 Pro Gamer', color: '#a78bfa' },    // Purple
+        { limit: 270, title: '🔥 Fast Reflexes', color: '#34d399' }, // Green
+        { limit: 330, title: '🐢 Human Average', color: '#94a3b8' }, // Gray
+        { limit: Infinity, title: '💤 Sloth Speed', color: '#f87171' } // Red
       ],
       sounds: {
         go: { freq: 880, type: 'sine', duration: 0.15, vol: 0.2 },
         early: { freq: 150, type: 'sawtooth', duration: 0.3, vol: 0.1 },
-        success: { freq: 587.33, type: 'triangle', duration: 0.4, vol: 0.15 }
+        success: { freq: 587.33, type: 'triangle', duration: 0.4, vol: 0.15 },
+        highscore: { freq: 1046.5, type: 'sine', duration: 0.5, vol: 0.2 } // High C
       }
     };
 
-    // State Variables
-    this.state = 'idle'; // 'idle', 'waiting', 'go'
+    this.state = 'idle'; 
     this.timer = null;
     this.startMs = 0;
     this.scores = [];
     this.bestMs = null;
     this.audioCtx = null;
 
-    // DOM Elements
     this.ui = {
       body: document.body,
       card: document.getElementById('card'),
@@ -254,14 +266,14 @@ class ReflexGame {
   }
 
   bindEvents() {
-    // Use an arrow function to preserve 'this' context
     const actionHandler = (e) => this.handleAction(e);
     
+    // pointerdown covers mouse and touch cleanly
     this.ui.body.addEventListener('pointerdown', actionHandler);
     document.addEventListener('keydown', actionHandler);
     
     this.ui.resetBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
+      e.stopPropagation(); // Prevents triggering a game cycle
       this.resetStats();
     });
   }
@@ -286,7 +298,6 @@ class ReflexGame {
       osc.type = type;
       osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
       
-      // Smooth envelope for clean audio
       gain.gain.setValueAtTime(0, this.audioCtx.currentTime);
       gain.gain.linearRampToValueAtTime(vol, this.audioCtx.currentTime + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + duration);
@@ -300,7 +311,6 @@ class ReflexGame {
     }
   }
 
-  // Local Storage with Error Handling (Failsafe for Incognito/Restricted modes)
   loadStats() {
     try {
       const storedBest = localStorage.getItem('reflexBest');
@@ -309,7 +319,12 @@ class ReflexGame {
       this.bestMs = storedBest ? parseInt(storedBest, 10) : null;
       this.scores = storedScores ? JSON.parse(storedScores) : [];
       
-      this.ui.bestVal.textContent = this.bestMs ? `${this.bestMs} ms` : '--';
+      if (this.bestMs) {
+        this.ui.bestVal.textContent = `${this.bestMs} ms`;
+        this.ui.bestVal.classList.add('new-best');
+      } else {
+        this.ui.bestVal.textContent = '--';
+      }
       this.updateAverage();
     } catch (e) {
       console.warn('LocalStorage is not available.');
@@ -320,9 +335,7 @@ class ReflexGame {
     try {
       localStorage.setItem('reflexBest', this.bestMs.toString());
       localStorage.setItem('reflexScores', JSON.stringify(this.scores));
-    } catch (e) {
-      // Fail silently if storage is restricted
-    }
+    } catch (e) {}
   }
 
   resetStats() {
@@ -336,6 +349,8 @@ class ReflexGame {
     this.ui.lastVal.textContent = '--';
     this.ui.bestVal.textContent = '--';
     this.ui.avgVal.textContent = '--';
+    this.ui.bestVal.classList.remove('new-best');
+    this.ui.rank.classList.remove('show');
     
     this.ui.resetBtn.textContent = 'Cleared!';
     setTimeout(() => this.ui.resetBtn.textContent = 'Reset Stats', 1000);
@@ -351,18 +366,22 @@ class ReflexGame {
     this.ui.avgVal.textContent = `${avg} ms`;
   }
 
-  getRank(ms) {
-    return this.CONFIG.ranks.find(r => ms < r.limit).title;
+  getRankObj(ms) {
+    return this.CONFIG.ranks.find(r => ms < r.limit);
   }
 
   resetUIState() {
-    this.ui.card.className = 'container';
+    this.ui.card.className = 'container'; // Resets animation classes
     this.ui.rank.classList.remove('show');
   }
 
   updateUI(bgVar, iconText, msgText, subText, animationClass = null) {
     this.resetUIState();
-    if (animationClass) this.ui.card.classList.add(animationClass);
+    if (animationClass) {
+      // Force reflow to restart animations
+      void this.ui.card.offsetWidth; 
+      this.ui.card.classList.add(animationClass);
+    }
     
     this.ui.body.style.background = `var(${bgVar})`;
     this.ui.icon.textContent = iconText;
@@ -376,7 +395,7 @@ class ReflexGame {
     if (e.type === 'keydown') {
       if (e.code !== 'Space') return;
       e.preventDefault();
-      if (e.repeat) return; // Prevent holding down spacebar
+      if (e.repeat) return; 
     }
 
     this.initAudio();
@@ -421,30 +440,39 @@ class ReflexGame {
     const reactionTime = Math.round(endMs - this.startMs);
     
     this.state = 'idle';
-    this.updateUI('--bg-idle', '⚡', `${reactionTime} ms`, 'Click or press Space to retry', 'state-pop');
-    setTimeout(() => this.ui.card.classList.remove('state-pop'), 200);
+    this.updateUI('--bg-idle', '⏱️', `${reactionTime} ms`, 'Click or press Space to retry', 'state-pop');
     
-    this.playSound(this.CONFIG.sounds.success);
-
-    // Update Stats
-    this.ui.lastVal.textContent = `${reactionTime} ms`;
+    // Manage array size for performance (keep rolling 100 max)
+    if (this.scores.length >= 100) this.scores.shift();
     this.scores.push(reactionTime);
+    this.ui.lastVal.textContent = `${reactionTime} ms`;
     
+    // High score check
+    let isNewBest = false;
     if (this.bestMs === null || reactionTime < this.bestMs) {
       this.bestMs = reactionTime;
       this.ui.bestVal.textContent = `${reactionTime} ms`;
+      
+      // Trigger new best animation
+      this.ui.bestVal.classList.remove('new-best');
+      void this.ui.bestVal.offsetWidth; // trigger reflow
+      this.ui.bestVal.classList.add('new-best');
+      isNewBest = true;
     }
 
+    this.playSound(isNewBest ? this.CONFIG.sounds.highscore : this.CONFIG.sounds.success);
     this.updateAverage();
     this.saveStats();
 
-    // Show Rank
-    this.ui.rank.textContent = this.getRank(reactionTime);
+    // Show dynamic Rank
+    const rank = this.getRankObj(reactionTime);
+    this.ui.rank.textContent = rank.title;
+    this.ui.rank.style.color = rank.color;
+    this.ui.rank.style.borderColor = rank.color;
     this.ui.rank.classList.add('show');
   }
 }
 
-// Boot the game when the DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   new ReflexGame();
 });

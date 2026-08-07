@@ -1,1 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reflex Test — God Tier Edition</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-idle: radial-gradient(circle at 50% 0%, #1e293b 0%, #020617 100%);
+    --bg-waiting: radial-gradient(circle at 50% 0%, #991b1b 0%, #450a0a 100%);
+    --bg-go: radial-gradient(circle at 50% 0%, #15803d 0%, #052e16 100%);
+    --bg-early: radial-gradient(circle at 50% 0%, #c2410c 0%, #431407 100%);
+    
+    --card-bg: rgba(255, 255, 255, 0.03);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --gold: #fbbf24;
+    --accent: #38bdf8;
+  }
 
+  * { 
+    box-sizing: border-box; 
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none; 
+    overflow: hidden;
+    perspective: 1000px; /* Required for 3D tilt */
+  }
+
+  /* Breathing animated background */
+  body::before {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    background-image: 
+      linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size: 60px 60px;
+    z-index: 0;
+    pointer-events: none;
+    animation: drift 30s linear infinite;
+  }
+
+  @keyframes drift {
+    0% { transform: translateY(0) rotate(0deg); }
+    100% { transform: translateY(60px) rotate(0.5deg); }
+  }
+
+  body {
+    background: var(--bg-idle);
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s ease-out;
+    cursor: pointer;
+  }
+
+  main {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 3.5rem 2.5rem;
+    background: var(--card-bg);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--card-border);
+    border-radius: 32px;
+    box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.8), 
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    max-width: 90%;
+    width: 500px;
+    pointer-events: none; 
+    transition: transform 0.1s ease-out; /* Smooths the JS mouse tracking */
+    transform-style: preserve-3d;
+  }
+
+  .streak-badge {
+    position: absolute;
+    top: -15px;
+    right: -15px;
+    background: linear-gradient(135deg, #ef4444, #f97316);
+    color: white;
+    font-weight: 900;
+    padding: 0.5rem 1rem;
+    border-radius: 99px;
+    font-size: 1rem;
+    box-shadow: 0 10px 20px rgba(239, 68, 68, 0.4);
+    opacity: 0;
+    transform: scale(0.5) translateZ(30px);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .streak-badge.active {
+    opacity: 1;
+    transform: scale(1) translateZ(30px);
+  }
+
+  /* Elements pop out in 3D */
+  .icon, h1, p, .stats-grid, .reset-btn {
+    transform: translateZ(20px);
+  }
+
+  .icon {
+    font-size: 5rem;
+    margin-bottom: 0.5rem;
+    filter: drop-shadow(0 15px 25px rgba(0,0,0,0.6));
+    line-height: 1;
+  }
+
+  h1 {
+    font-size: 3rem;
+    font-weight: 900;
+    margin: 0 0 0.5rem 0;
+    letter-spacing: -0.05em;
+    line-height: 1.1;
+    text-shadow: 0 10px 20px rgba(0,0,0,0.3);
+  }
+
+  p.subtitle {
+    font-size: 1.2rem;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 400;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 3.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .stat-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1.25rem 0.5rem;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.02);
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 0.4rem;
+    font-weight: 800;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .reset-btn {
+    margin-top: 2.5rem;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    pointer-events: auto; 
+    transition: all 0.2s ease;
+    font-family: inherit;
+    font-weight: 800;
+    padding: 0.8rem 1.5rem;
+    border-radius: 12px;
+  }
+
+  .reset-btn:hover, .reset-btn:focus-visible {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+    outline: none;
+  }
+</style>
+</head>
+<body>
+
+<main id="card" aria-live="polite">
+  <div class="streak-badge" id="streak-badge">🔥 2x COMBO</div>
+  <div class="icon" id="icon" aria-hidden="true">⚡</div>
+  <h1 id="msg">Click or Space</h1>
+  <p class="subtitle" id="sub">Reflexes ready?</p>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <span class="stat-label">Best</span>
+      <span class="stat-value" id="best-val">--</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Last</span>
+      <span class="stat-value" id="last-val">--</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Avg</span>
+      <span class="stat-value" id="avg-val">--</span>
+    </div>
+  </div>
+  
+  <button class="reset-btn" id="reset-btn" aria-label="Reset Statistics">Reset Stats</button>
+</main>
+
+<script>
+class ReflexGame {
+  constructor() {
+    this.CONFIG = {
+      delays: { min: 1500, max: 4000 },
+      cheatThreshold: 40,
+      streakThreshold: 250, // ms to maintain a streak
+      maxScores: 25,
+      sounds: {
+        go: { freq: 880, type: 'sine', duration: 0.15, vol: 0.3 },
+        early: { freq: 150, type: 'sawtooth', duration: 0.3, vol: 0.2 },
+        success: { freq: 587.33, type: 'triangle', duration: 0.4, vol: 0.2 },
+        highscore: { freq: 1046.5, type: 'sine', duration: 0.6, vol: 0.3 }
+      },
+      haptics: {
+        go: [200],
+        early: [50, 50, 50],
+        success: [30],
+        highscore: [50, 50, 100, 50]
+      }
+    };
+
+    this.state = 'idle'; 
+    this.timer = null;
+    this.startMs = 0;
+    this.scores = [];
+    this.bestMs = null;
+    this.streak = 0;
+    this.audioCtx = null;
+    this.waitingAnimation = null;
+
+    this.ui = {
+      body: document.body,
+      card: document.getElementById('card'),
+      msg: document.getElementById('msg'),
+      sub: document.getElementById('sub'),
+      icon: document.getElementById('icon'),
+      bestVal: document.getElementById('best-val'),
+      lastVal: document.getElementById('last-val'),
+      avgVal: document.getElementById('avg-val'),
+      resetBtn: document.getElementById('reset-btn'),
+      streakBadge: document.getElementById('streak-badge')
+    };
+
+    this.init();
+  }
+
+  init() {
+    this.loadStats();
+    this.bindEvents();
+    this.init3DTilt();
+  }
+
+  /* --- 3D Mouse Parallax --- */
+  init3DTilt() {
+    document.addEventListener('mousemove', (e) => {
+      if (window.innerWidth < 768) return; // Disable on mobile
+      
+      const xAxis = (window.innerWidth / 2 - e.pageX) / 30;
+      const yAxis = (window.innerHeight / 2 - e.pageY) / 30;
+      
+      this.ui.card.style.transform = `rotateY(${xAxis}deg) rotateX(${-yAxis}deg)`;
+    });
+
+    // Reset rotation when mouse leaves window
+    document.addEventListener('mouseleave', () => {
+      this.ui.card.style.transform = `rotateY(0deg) rotateX(0deg)`;
+    });
+  }
+
+  bindEvents() {
+    const actionHandler = (e) => {
+      if (e.target === this.ui.resetBtn) return;
+      if (e.type === 'keydown' && (e.code !== 'Space' || e.repeat)) return;
+      e.preventDefault();
+      this.handleAction();
+    };
+    
+    window.addEventListener('pointerdown', actionHandler);
+    window.addEventListener('keydown', actionHandler);
+    
+    this.ui.resetBtn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      this.resetStats();
+    });
+  }
+
+  /* --- Hardware APIs (Audio & Vibrate) --- */
+  initAudio() {
+    if (!this.audioCtx) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) this.audioCtx = new AudioContext();
+    }
+    if (this.audioCtx?.state === 'suspended') this.audioCtx.resume();
+  }
+
+  playFeedback(soundConfig, vibratePattern) {
+    // Vibrate
+    if (navigator.vibrate) navigator.vibrate(vibratePattern);
+    
+    // Audio
+    if (!this.audioCtx) return;
+    try {
+      const osc = this.audioCtx.createOscillator();
+      const gain = this.audioCtx.createGain();
+      osc.type = soundConfig.type;
+      osc.frequency.setValueAtTime(soundConfig.freq, this.audioCtx.currentTime);
+      gain.gain.setValueAtTime(0, this.audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(soundConfig.vol, this.audioCtx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + soundConfig.duration);
+      osc.connect(gain);
+      gain.connect(this.audioCtx.destination);
+      osc.start();
+      osc.stop(this.audioCtx.currentTime + soundConfig.duration);
+    } catch (e) {}
+  }
+
+  /* --- Storage --- */
+  loadStats() {
+    this.bestMs = parseInt(localStorage.getItem('gtReflexBest')) || null;
+    this.scores = JSON.parse(localStorage.getItem('gtReflexScores')) || [];
+    this.ui.bestVal.textContent = this.bestMs ? `${this.bestMs} ms` : '--';
+    if (this.bestMs) this.ui.bestVal.style.color = 'var(--gold)';
+    this.updateAverage();
+  }
+
+  saveStats() {
+    localStorage.setItem('gtReflexBest', this.bestMs.toString());
+    localStorage.setItem('gtReflexScores', JSON.stringify(this.scores));
+  }
+
+  resetStats() {
+    localStorage.removeItem('gtReflexBest');
+    localStorage.removeItem('gtReflexScores');
+    this.scores = [];
+    this.bestMs = null;
+    this.streak = 0;
+    
+    ['lastVal', 'bestVal', 'avgVal'].forEach(id => this.ui[id].textContent = '--');
+    this.ui.bestVal.style.color = '';
+    this.ui.streakBadge.classList.remove('active');
+    
+    this.ui.resetBtn.textContent = 'Wiped!';
+    setTimeout(() => this.ui.resetBtn.textContent = 'Reset Stats', 1000);
+  }
+
+  /* --- UI Helpers --- */
+  updateAverage() {
+    if (!this.scores.length) return;
+    const avg = Math.round(this.scores.reduce((a, b) => a + b, 0) / this.scores.length);
+    this.ui.avgVal.textContent = `${avg} ms`;
+  }
+
+  updateUI(bgVar, iconText, msgText, subText) {
+    this.ui.body.style.background = `var(${bgVar})`;
+    this.ui.icon.textContent = iconText;
+    this.ui.msg.textContent = msgText;
+    this.ui.sub.textContent = subText;
+  }
+
+  animatePop(element, scale = 1.15) {
+    element.animate([
+      { transform: 'scale(1) translateZ(20px)' },
+      { transform: `scale(${scale}) translateZ(40px)`, offset: 0.5 },
+      { transform: 'scale(1) translateZ(20px)' }
+    ], { duration: 400, easing: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)' });
+  }
+
+  /* --- Game Logic --- */
+  handleAction() {
+    this.initAudio();
+    switch (this.state) {
+      case 'idle': this.startWaiting(); break;
+      case 'waiting': this.triggerEarly(); break;
+      case 'go': this.registerClick(); break;
+    }
+  }
+
+  startWaiting() {
+    this.state = 'waiting';
+    this.updateUI('--bg-waiting', '✋', 'Hold steady...', 'Wait for the green signal');
+
+    this.waitingAnimation = this.ui.card.animate([
+      { transform: 'scale(1) translateZ(0)' },
+      { transform: 'scale(1.02) translateZ(10px)' },
+      { transform: 'scale(1) translateZ(0)' }
+    ], { duration: 1000, iterations: Infinity, easing: 'ease-in-out' });
+
+    const delay = this.CONFIG.delays.min + Math.random() * (this.CONFIG.delays.max - this.CONFIG.delays.min);
+    
+    this.timer = setTimeout(() => {
+      this.state = 'go';
+      if (this.waitingAnimation) this.waitingAnimation.cancel();
+      this.updateUI('--bg-go', '⚡', 'STRIKE!', 'Tap instantly!');
+      this.startMs = performance.now();
+      this.playFeedback(this.CONFIG.sounds.go, this.CONFIG.haptics.go);
+    }, delay);
+  }
+
+  triggerEarly() {
+    clearTimeout(this.timer);
+    if (this.waitingAnimation) this.waitingAnimation.cancel();
+    
+    this.state = 'idle';
+    this.streak = 0; // Lose streak
+    this.ui.streakBadge.classList.remove('active');
+    
+    this.updateUI('--bg-early', '⚠️', 'Misfire!', 'You pulled the trigger too soon.');
+    this.playFeedback(this.CONFIG.sounds.early, this.CONFIG.haptics.early);
+    
+    this.ui.card.animate([
+      { transform: 'translateX(-15px) rotateY(-5deg)' },
+      { transform: 'translateX(15px) rotateY(5deg)', offset: 0.3 },
+      { transform: 'translateX(-10px) rotateY(-3deg)', offset: 0.6 },
+      { transform: 'translateX(0) rotateY(0)' }
+    ], { duration: 400 });
+  }
+
+  registerClick() {
+    const reactionTime = Math.round(performance.now() - this.startMs);
+    this.state = 'idle';
+
+    if (reactionTime < this.CONFIG.cheatThreshold) {
+      this.triggerEarly();
+      this.ui.msg.textContent = 'Too Fast (Bot?)';
+      return;
+    }
+
+    // Streak Logic
+    if (reactionTime <= this.CONFIG.streakThreshold) {
+      this.streak++;
+      if (this.streak > 1) {
+        this.ui.streakBadge.textContent = `🔥 ${this.streak}x COMBO`;
+        this.ui.streakBadge.classList.add('active');
+        this.animatePop(this.ui.streakBadge, 1.3);
+      }
+    } else {
+      this.streak = 0;
+      this.ui.streakBadge.classList.remove('active');
+    }
+
+    this.updateUI('--bg-idle', '⏱️', `${reactionTime} ms`, 'Tap anywhere to go again');
+    this.animatePop(this.ui.icon);
+    
+    if (this.scores.length >= this.CONFIG.maxScores) this.scores.shift();
+    this.scores.push(reactionTime);
+    this.ui.lastVal.textContent = `${reactionTime} ms`;
+    
+    let isNewBest = false;
+    if (!this.bestMs || reactionTime < this.bestMs) {
+      this.bestMs = reactionTime;
+      this.ui.bestVal.textContent = `${reactionTime} ms`;
+      this.ui.bestVal.style.color = 'var(--gold)';
+      this.animatePop(this.ui.bestVal, 1.4);
+      isNewBest = true;
+    }
+
+    this.playFeedback(
+      isNewBest ? this.CONFIG.sounds.highscore : this.CONFIG.sounds.success,
+      isNewBest ? this.CONFIG.haptics.highscore : this.CONFIG.haptics.success
+    );
+    
+    this.updateAverage();
+    this.saveStats();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => new ReflexGame());
+</script>
+</body>
+</html>

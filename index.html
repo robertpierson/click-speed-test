@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Reflex Test — God Tier Edition</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#1e293b">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -62,6 +63,12 @@
     justify-content: center;
     transition: background 0.3s ease-out;
     cursor: pointer;
+    outline: none; /* Removes default focus ring for keyboard interaction */
+  }
+
+  /* Accessibility focus ring applied gracefully */
+  body:focus-visible {
+    box-shadow: inset 0 0 0 4px var(--accent);
   }
 
   main {
@@ -190,7 +197,7 @@
   }
 </style>
 </head>
-<body>
+<body tabindex="0">
 
 <main id="card" aria-live="polite">
   <div class="streak-badge" id="streak-badge">🔥 2x COMBO</div>
@@ -217,6 +224,8 @@
 </main>
 
 <script>
+'use strict';
+
 class ReflexGame {
   constructor() {
     this.CONFIG = {
@@ -246,6 +255,7 @@ class ReflexGame {
     this.streak = 0;
     this.audioCtx = null;
     this.waitingAnimation = null;
+    this.ticking = false;
 
     this.ui = {
       body: document.body,
@@ -267,20 +277,30 @@ class ReflexGame {
     this.loadStats();
     this.bindEvents();
     this.init3DTilt();
+    
+    // Auto-focus the body so Spacebar works immediately
+    this.ui.body.focus();
   }
 
   /* --- 3D Mouse Parallax --- */
   init3DTilt() {
     document.addEventListener('mousemove', (e) => {
-      if (window.innerWidth < 768) return; // Disable on mobile
+      // Use matchMedia instead of window width to detect non-touch devices
+      if (!window.matchMedia('(pointer: fine)').matches) return;
       
-      const xAxis = (window.innerWidth / 2 - e.pageX) / 30;
-      const yAxis = (window.innerHeight / 2 - e.pageY) / 30;
-      
-      this.ui.card.style.transform = `rotateY(${xAxis}deg) rotateX(${-yAxis}deg)`;
+      // requestAnimationFrame ensures smooth rendering without overloading the CPU
+      if (!this.ticking) {
+        window.requestAnimationFrame(() => {
+          const xAxis = (window.innerWidth / 2 - e.pageX) / 30;
+          const yAxis = (window.innerHeight / 2 - e.pageY) / 30;
+          
+          this.ui.card.style.transform = `rotateY(${xAxis}deg) rotateX(${-yAxis}deg)`;
+          this.ticking = false;
+        });
+        this.ticking = true;
+      }
     });
 
-    // Reset rotation when mouse leaves window
     document.addEventListener('mouseleave', () => {
       this.ui.card.style.transform = `rotateY(0deg) rotateX(0deg)`;
     });
@@ -309,28 +329,36 @@ class ReflexGame {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (AudioContext) this.audioCtx = new AudioContext();
     }
-    if (this.audioCtx?.state === 'suspended') this.audioCtx.resume();
+    // Added catch for browser autoplay restrictions
+    if (this.audioCtx?.state === 'suspended') {
+      this.audioCtx.resume().catch(() => console.warn('Audio play prevented by browser policy'));
+    }
   }
 
   playFeedback(soundConfig, vibratePattern) {
-    // Vibrate
     if (navigator.vibrate) navigator.vibrate(vibratePattern);
     
-    // Audio
-    if (!this.audioCtx) return;
+    if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
+    
     try {
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
+      
       osc.type = soundConfig.type;
       osc.frequency.setValueAtTime(soundConfig.freq, this.audioCtx.currentTime);
+      
       gain.gain.setValueAtTime(0, this.audioCtx.currentTime);
       gain.gain.linearRampToValueAtTime(soundConfig.vol, this.audioCtx.currentTime + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + soundConfig.duration);
+      
       osc.connect(gain);
       gain.connect(this.audioCtx.destination);
+      
       osc.start();
       osc.stop(this.audioCtx.currentTime + soundConfig.duration);
-    } catch (e) {}
+    } catch (e) {
+      console.error('Audio playback failed', e);
+    }
   }
 
   /* --- Storage --- */
